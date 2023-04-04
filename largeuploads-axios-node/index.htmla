@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>File Upload Example</title>
+  </head>
+  <body>
+    <h1>File Upload Example</h1>
+    <form>
+      <input type="file" name="files" multiple enctype="multipart/form-data" />
+      <button type="button" onclick="uploadFiles()">Upload Files</button>
+    </form>
+
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script>
+      const CHUNK_SIZE = 524288 // 0.5 MB in bytes;
+
+      async function uploadFiles() {
+        try {
+          const fileInput = document.querySelector('input[type="file"]')
+          const files = fileInput.files
+
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i]
+            const fileSizeInBytes = file.size
+            let start = 0
+            let end = CHUNK_SIZE - 1
+            let chunkNum = 0
+
+            while (start < fileSizeInBytes) {
+              const fileChunk = await readFileChunk(file, start, end)
+              await sendFileChunk(file, i, chunkNum, fileChunk)
+              start = end + 1
+              end = Math.min(start + CHUNK_SIZE - 1, fileSizeInBytes - 1)
+              chunkNum++
+            }
+          }
+        } catch (error) {
+          console.error(error)
+        }
+      }
+
+      async function sendFileChunk(file, fileIndex, chunkNum, chunkData) {
+        const formData = new FormData()
+        formData.append('files', file)
+        formData.append(`file-${fileIndex}-chunk-${chunkNum}`, chunkData, `${file.name}.part${chunkNum}`)
+
+        const response = await axios.post('http://localhost:3000/upload', formData, {
+          headers: {
+            'Content-Type': `multipart/form-data; boundary=${formData._boundary}`
+          }
+        })
+
+        console.log(`File ${fileIndex} chunk ${chunkNum} sent successfully`)
+      }
+
+      async function readFileChunk(file, start, end) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            const chunkData = event.target.result
+            const chunkBlob = new Blob([chunkData], { type: file.type })
+            resolve(chunkBlob)
+          }
+          reader.onerror = reject
+          reader.readAsArrayBuffer(file.slice(start, end + 1))
+        })
+      }
+    </script>
+  </body>
+</html>
